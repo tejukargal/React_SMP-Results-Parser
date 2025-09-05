@@ -31,10 +31,12 @@ class StudentResultsApp {
         
         // Tab navigation
         document.getElementById('structured-tab').addEventListener('click', () => this.switchTab('structured'));
+        document.getElementById('analysis-tab').addEventListener('click', () => this.switchTab('analysis'));
         document.getElementById('raw-tab').addEventListener('click', () => this.switchTab('raw'));
         
         // Export and copy buttons
         document.getElementById('export-pdf-btn').addEventListener('click', () => this.exportToPDF());
+        document.getElementById('export-csv-btn').addEventListener('click', () => this.exportToCSV());
         document.getElementById('copy-results-btn').addEventListener('click', () => this.copyResults());
         document.getElementById('copy-raw-btn').addEventListener('click', () => this.copyRawText());
         document.getElementById('debug-btn').addEventListener('click', () => this.showDebugInfo());
@@ -166,6 +168,86 @@ class StudentResultsApp {
         document.getElementById('results-container').classList.add('hidden');
     }
 
+    calculateResultStatistics() {
+        if (!this.currentResults || !this.currentResults.students) {
+            return {
+                totalStudents: 0,
+                totalPassed: 0,
+                totalFailed: 0,
+                passPercentage: 0,
+                totalDistinction: 0,
+                totalFirstClass: 0,
+                totalSecondClass: 0,
+                totalPass: 0,
+                totalFails: 0
+            };
+        }
+
+        const students = this.currentResults.students;
+        const totalStudents = students.length;
+        
+        let totalPassed = 0;
+        let totalFailed = 0;
+        let totalDistinction = 0;
+        let totalFirstClass = 0;
+        let totalSecondClass = 0;
+        let totalPass = 0;
+        let totalFails = 0;
+
+        students.forEach(student => {
+            const result = student.finalResult.toUpperCase();
+            
+            // Count passed and failed
+            if (result.includes('PASS') || result.includes('DISTINCTION') || result.includes('FIRST CLASS') || result.includes('SECOND CLASS')) {
+                totalPassed++;
+            } else if (result.includes('FAIL')) {
+                totalFailed++;
+            }
+            
+            // Count specific result categories
+            if (result.includes('DISTINCTION')) {
+                totalDistinction++;
+            } else if (result.includes('FIRST CLASS')) {
+                totalFirstClass++;
+            } else if (result.includes('SECOND CLASS')) {
+                totalSecondClass++;
+            } else if (result === 'PASS') {
+                totalPass++;
+            } else if (result.includes('FAIL')) {
+                totalFails++;
+            }
+        });
+
+        const passPercentage = totalStudents > 0 ? Math.round((totalPassed / totalStudents) * 100) : 0;
+
+        return {
+            totalStudents,
+            totalPassed,
+            totalFailed,
+            passPercentage,
+            totalDistinction,
+            totalFirstClass,
+            totalSecondClass,
+            totalPass,
+            totalFails
+        };
+    }
+
+    displayResultAnalysis() {
+        const stats = this.calculateResultStatistics();
+        
+        // Update statistics display
+        document.getElementById('total-students').textContent = stats.totalStudents;
+        document.getElementById('total-passed').textContent = stats.totalPassed;
+        document.getElementById('total-failed').textContent = stats.totalFailed;
+        document.getElementById('pass-percentage').textContent = `${stats.passPercentage}%`;
+        document.getElementById('total-distinction').textContent = stats.totalDistinction;
+        document.getElementById('total-first-class').textContent = stats.totalFirstClass;
+        document.getElementById('total-second-class').textContent = stats.totalSecondClass;
+        document.getElementById('total-pass').textContent = stats.totalPass;
+        document.getElementById('total-fails').textContent = stats.totalFails;
+    }
+
     displayResults() {
         if (!this.currentResults) {
             console.log('No current results to display');
@@ -178,13 +260,53 @@ class StudentResultsApp {
         // Show results container
         document.getElementById('results-container').classList.remove('hidden');
         
+        // Display examination info in header
+        const examInfoElement = document.getElementById('exam-info');
+        if (this.currentResults.examinationInfo && this.currentResults.examinationInfo !== 'Unknown Examination') {
+            examInfoElement.textContent = `DIPLOMA EXAMINATION ${this.currentResults.examinationInfo}`;
+            examInfoElement.classList.remove('hidden');
+        } else {
+            examInfoElement.classList.add('hidden');
+        }
+        
         // Display raw text
         document.getElementById('raw-text').textContent = this.currentResults.rawText;
+        
+        // Populate result filter dropdown with unique values
+        this.populateResultFilter();
         
         // Filter and display students
         this.filteredStudents = [...this.currentResults.students];
         console.log('Filtered students:', this.filteredStudents);
         this.renderStudentsTable();
+        
+        // Display result analysis if analysis tab is active
+        const analysisTab = document.getElementById('analysis-tab');
+        if (analysisTab && analysisTab.classList.contains('active')) {
+            this.displayResultAnalysis();
+        }
+    }
+
+    populateResultFilter() {
+        const resultFilter = document.getElementById('result-filter');
+        
+        // Clear existing options except the first one ("All Results")
+        while (resultFilter.options.length > 1) {
+            resultFilter.remove(1);
+        }
+        
+        // Get unique result values from students
+        const uniqueResults = [...new Set(this.currentResults.students.map(student => student.finalResult))];
+        
+        // Add each unique result as an option
+        uniqueResults.forEach(result => {
+            if (result && result !== 'Unknown') {
+                const option = document.createElement('option');
+                option.value = result.toUpperCase();
+                option.textContent = result;
+                resultFilter.appendChild(option);
+            }
+        });
     }
 
     filterResults() {
@@ -200,12 +322,18 @@ class StudentResultsApp {
                 student.fatherName.toLowerCase().includes(searchTerm);
 
             const matchesFilter = !resultFilter || 
-                student.finalResult.toUpperCase() === resultFilter;
+                student.finalResult.toUpperCase() === resultFilter.toUpperCase();
 
             return matchesSearch && matchesFilter;
         });
 
         this.renderStudentsTable();
+        
+        // Update analysis if analysis tab is active
+        const analysisTab = document.getElementById('analysis-tab');
+        if (analysisTab && analysisTab.classList.contains('active')) {
+            this.displayResultAnalysis();
+        }
     }
 
     renderStudentsTable() {
@@ -299,6 +427,11 @@ class StudentResultsApp {
                         </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        <span class="px-2 py-1 text-xs font-semibold rounded ${this.getResultClass(subject.result)}">
+                            ${subject.result}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                         ${subject.credits}
                     </td>
                 `;
@@ -327,6 +460,17 @@ class StudentResultsApp {
         }
     }
 
+    getResultClass(result) {
+        switch (result.toLowerCase()) {
+            case 'pass':
+                return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
+            case 'fail':
+                return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
+            default:
+                return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+        }
+    }
+
     closeModal() {
         document.getElementById('subject-modal').classList.add('hidden');
     }
@@ -349,6 +493,11 @@ class StudentResultsApp {
         tabButton.classList.add('active', 'border-blue-500', 'text-blue-600', 'dark:text-blue-400');
         tabButton.classList.remove('border-transparent', 'text-gray-500', 'dark:text-gray-400');
         tabContent.classList.remove('hidden');
+        
+        // If switching to analysis tab, display the analysis
+        if (tab === 'analysis' && this.currentResults) {
+            this.displayResultAnalysis();
+        }
     }
 
     async exportToPDF() {
@@ -360,16 +509,18 @@ class StudentResultsApp {
             
             // Title
             doc.setFontSize(16);
-            doc.text('Student Results Report', 20, 20);
+            const examInfo = this.currentResults.examinationInfo || 'Unknown Examination';
+            doc.text(`DIPLOMA EXAMINATION ${examInfo}`, 20, 20);
+            doc.text('Student Results Report', 20, 30);
             
             // Institute info
             doc.setFontSize(10);
-            doc.text(`Institute: ${this.currentResults.institute}`, 20, 35);
-            doc.text(`Programme: ${this.currentResults.programme}`, 20, 42);
-            doc.text(`Date: ${this.currentResults.resultDate}`, 20, 49);
+            doc.text(`Institute: ${this.currentResults.institute}`, 20, 45);
+            doc.text(`Programme: ${this.currentResults.programme}`, 20, 52);
+            doc.text(`Date: ${this.currentResults.resultDate}`, 20, 59);
             
             // Table headers
-            let y = 65;
+            let y = 75;
             doc.setFontSize(8);
             doc.text('Reg. No.', 20, y);
             doc.text('Name', 60, y);
@@ -397,6 +548,48 @@ class StudentResultsApp {
             doc.save('student-results.pdf');
         } catch (error) {
             this.showError('Failed to export PDF: ' + error.message);
+        }
+    }
+
+    async exportToCSV() {
+        if (!this.currentResults) return;
+
+        try {
+            // Create CSV content
+            let csvContent = '';
+            
+            // Add title row
+            const examInfo = this.currentResults.examinationInfo || 'Unknown Examination';
+            csvContent += `"DIPLOMA EXAMINATION ${examInfo}"\n`;
+            csvContent += '"Student Results Report"\n\n';
+            
+            // Add header info
+            csvContent += `"Institute: ${this.currentResults.institute}"\n`;
+            csvContent += `"Programme: ${this.currentResults.programme}"\n`;
+            csvContent += `"Date: ${this.currentResults.resultDate}"\n\n`;
+            
+            // Add CSV header
+            csvContent += '"Reg. No.","Name","Father\'s Name","Result"\n';
+            
+            // Add data rows
+            this.filteredStudents.forEach(student => {
+                csvContent += `"${student.regNo}","${student.name}","${student.fatherName}","${student.finalResult}"\n`;
+            });
+            
+            // Create and download CSV file
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'student-results.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            this.showSuccessMessage('CSV file downloaded successfully!');
+        } catch (error) {
+            this.showError('Failed to export CSV: ' + error.message);
         }
     }
 

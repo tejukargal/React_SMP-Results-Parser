@@ -49,6 +49,7 @@ class ClientPDFParser {
                 institute: '',
                 programme: '',
                 resultDate: '',
+                examinationInfo: '',
                 students: [],
                 rawText
             };
@@ -56,6 +57,7 @@ class ClientPDFParser {
             results.institute = this.extractInstitute(rawText);
             results.programme = this.extractProgramme(rawText);
             results.resultDate = this.extractResultDate(rawText);
+            results.examinationInfo = this.extractExaminationInfo(rawText);
             results.students = this.extractStudents(rawText);
 
             console.log('Parsing results:', {
@@ -109,6 +111,63 @@ class ClientPDFParser {
         
         const fallbackMatch = text.match(/(?:DATE|RESULT DATE)[\s:]*(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i);
         return fallbackMatch ? fallbackMatch[1] : new Date().toLocaleDateString();
+    }
+
+    static extractExaminationInfo(text) {
+        // Look for the specific pattern: "RESULT LEDGER - DIPLOMA EXAMINATION Nov/Dec-2023"
+        const examPattern = /RESULT LEDGER\s*-\s*DIPLOMA EXAMINATION\s+([A-Za-z]+\/[A-Za-z]+-\d{4})/i;
+        const match = text.match(examPattern);
+        
+        if (match && match[1]) {
+            // Extract the month/year part (e.g., "Nov/Dec-2023")
+            const examInfo = match[1];
+            // Replace hyphen with space for better formatting
+            return examInfo.replace('-', ' ');
+        }
+        
+        // Fallback patterns if the specific format is not found
+        const fallbackPatterns = [
+            /DIPLOMA.*?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[\/\s]*(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)?[\/\s]*([12]\d{3})/i,
+            /(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[\/\s]*(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)?[\/\s]*([12]\d{3})/i,
+            /EXAMINATION.*?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[\/\s]*([12]\d{3})/i
+        ];
+        
+        for (const pattern of fallbackPatterns) {
+            const match = text.match(pattern);
+            if (match) {
+                // Return the examination info in format "Nov/Dec 2023"
+                const month1 = match[1] ? match[1].toUpperCase() : '';
+                const month2 = match[2] ? match[2].toUpperCase() : '';
+                const year = match[3] || '';
+                
+                if (month1 && month2 && year) {
+                    return `${month1}/${month2} ${year}`;
+                } else if (month1 && year) {
+                    return `${month1} ${year}`;
+                }
+            }
+        }
+        
+        // Fallback to result date if no specific examination info found
+        const resultDate = this.extractResultDate(text);
+        if (resultDate) {
+            const dateParts = resultDate.split('/');
+            if (dateParts.length === 3) {
+                const month = this.getMonthName(parseInt(dateParts[1]));
+                const year = dateParts[2];
+                return `${month} ${year}`;
+            }
+        }
+        
+        return 'Unknown Examination';
+    }
+
+    static getMonthName(monthNumber) {
+        const months = [
+            'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+        ];
+        return months[monthNumber - 1] || 'Unknown';
     }
 
     static extractStudents(text) {

@@ -30,6 +30,7 @@ export interface ParsedResults {
   institute: string;
   programme: string;
   resultDate: string;
+  examinationInfo: string;
   students: Student[];
   rawText: string;
 }
