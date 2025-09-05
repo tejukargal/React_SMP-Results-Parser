@@ -1,110 +1,22 @@
-class ClientPDFParser {
-    static async parsePDF(file) {
-        try {
-            // Use PDF.js to extract text from PDF
-            const arrayBuffer = await file.arrayBuffer();
-            
-            // Load PDF.js
-            if (!window.pdfjsLib) {
-                await this.loadPDFJS();
-            }
-            
-            const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-            
-            let rawText = '';
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                
-                // Better text extraction - preserve spacing and line breaks
-                let pageText = '';
-                let lastY = null;
-                
-                textContent.items.forEach((item, index) => {
-                    // If this is a new line (different Y position), add newline
-                    if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) {
-                        pageText += '\n';
-                    }
-                    
-                    // Add the text with space if needed
-                    if (index > 0 && !pageText.endsWith('\n') && !pageText.endsWith(' ')) {
-                        pageText += ' ';
-                    }
-                    
-                    pageText += item.str;
-                    lastY = item.transform[5];
-                });
-                
-                rawText += pageText + '\n';
-            }
-            
-            console.log('Raw text length:', rawText.length);
-            console.log('Raw text preview:', rawText.substring(0, 500));
-            
-            const results = {
-                institute: '',
-                programme: '',
-                resultDate: '',
-                students: [],
-                rawText
-            };
+const fs = require('fs');
+const pdfParse = require('pdf-parse');
 
-            results.institute = this.extractInstitute(rawText);
-            results.programme = this.extractProgramme(rawText);
-            results.resultDate = this.extractResultDate(rawText);
-            results.students = this.extractStudents(rawText);
-
-            console.log('Parsing results:', {
-                institute: results.institute,
-                programme: results.programme,
-                studentsCount: results.students.length
-            });
-            
-            results.students.forEach((student, index) => {
-                console.log(`Student ${index + 1}:`, student.regNo, student.name, `Subjects: ${student.semesterResults[0]?.subjects.length || 0}`);
-            });
-
-            return results;
-        } catch (error) {
-            throw new Error(`Failed to parse PDF: ${error.message}`);
-        }
-    }
-    
-    static async loadPDFJS() {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-            script.onload = () => {
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                resolve();
-            };
-            script.onerror = reject;
-            document.head.appendChild(script);
-        });
-    }
-
-    static extractInstitute(text) {
-        const instituteMatch = text.match(/Institute\s*:\s*\d+\s*-\s*\[\s*([^\]]+)\s*\]/i);
-        if (instituteMatch) return instituteMatch[1].trim();
+// Copy the updated parsing functions from client-side parser
+class TestParser {
+    static async parsePDF(buffer) {
+        const pdfData = await pdfParse(buffer);
+        const rawText = pdfData.text;
         
-        const fallbackMatch = text.match(/(?:UNIVERSITY|COLLEGE|INSTITUTION)[^\n]*/i);
-        return fallbackMatch ? fallbackMatch[0].trim() : 'Unknown Institute';
-    }
+        const results = {
+            institute: '',
+            programme: '',
+            resultDate: '',
+            students: [],
+            rawText
+        };
 
-    static extractProgramme(text) {
-        const programmeMatch = text.match(/Programme\s*:\s*([A-Z]+)\s*-\s*([^\n]+)/i);
-        if (programmeMatch) return `${programmeMatch[1]} - ${programmeMatch[2].trim()}`;
-        
-        const fallbackMatch = text.match(/(?:PROGRAMME|COURSE|BRANCH)[\s:]*([^\n]+)/i);
-        return fallbackMatch ? fallbackMatch[1].trim() : 'Unknown Programme';
-    }
-
-    static extractResultDate(text) {
-        const dateMatch = text.match(/Result Date\s*:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
-        if (dateMatch) return dateMatch[1];
-        
-        const fallbackMatch = text.match(/(?:DATE|RESULT DATE)[\s:]*(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i);
-        return fallbackMatch ? fallbackMatch[1] : new Date().toLocaleDateString();
+        results.students = this.extractStudents(rawText);
+        return results;
     }
 
     static extractStudents(text) {
@@ -143,6 +55,8 @@ class ClientPDFParser {
             const studentMatch = line.match(/(\d+)\s+(\d+(?:CE|ME|EC|CS|EE)\d+)\s+(.+?)\s*\[\s*S\(D\)\s*\/\s*o\s*:\s*(.+?)\s*\]/);
             if (studentMatch) {
                 const [, sno, regNo, studentName, fatherName] = studentMatch;
+                
+                console.log(`Found student: ${regNo} - ${studentName}`);
                 
                 currentStudent = {
                     regNo: regNo.trim(),
@@ -228,11 +142,6 @@ class ClientPDFParser {
                         }
                     }
                 }
-            }
-            
-            // Extract SGPA
-            if (currentStudent && line.includes('SGPA') && line.includes('(Atempts)')) {
-                currentStudent.sgpa = this.extractSGPA(line);
             }
         }
     }
@@ -327,26 +236,38 @@ class ClientPDFParser {
         const parsed = parseInt(mark);
         return isNaN(parsed) ? 0 : parsed;
     }
+}
 
-    static extractSGPA(line) {
-        const sgpa = {};
+async function testUpdatedParser() {
+    try {
+        const pdfPath = 'c:/Users/Lekhana/Downloads/Results CE 1-4.pdf';
+        const buffer = fs.readFileSync(pdfPath);
         
-        const sgpaMatch = line.match(/SGPA\s*\(Atempts\)\s*([\d\.\s\(\)]+)/i);
+        console.log('Testing updated parser...');
+        const results = await TestParser.parsePDF(buffer);
         
-        if (sgpaMatch && sgpaMatch[1]) {
-            const values = sgpaMatch[1].match(/(\d+\.\d+)\s*\(\d+\)/g);
-            if (values) {
-                values.forEach((value, index) => {
-                    const sgpaValueMatch = value.match(/(\d+\.\d+)/);
-                    if (sgpaValueMatch) {
-                        const sgpaValue = parseFloat(sgpaValueMatch[1]);
-                        const semesterNumber = index + 1;
-                        sgpa[`sem${semesterNumber}`] = sgpaValue;
-                    }
+        console.log('\n=== PARSING RESULTS ===');
+        console.log(`Students found: ${results.students.length}`);
+        
+        results.students.forEach((student, index) => {
+            const subjectCount = student.semesterResults[0]?.subjects.length || 0;
+            console.log(`\n${index + 1}. ${student.regNo} - ${student.name}`);
+            console.log(`   Father: ${student.fatherName}`);
+            console.log(`   Result: ${student.finalResult}`);
+            console.log(`   Subjects: ${subjectCount}`);
+            
+            if (subjectCount > 0) {
+                student.semesterResults[0].subjects.forEach((subject, idx) => {
+                    console.log(`     ${idx + 1}. ${subject.qpCode}: ${subject.subjectName}`);
+                    console.log(`        Marks: IA=${subject.marks.IA}, Tr=${subject.marks.Tr}, Pr=${subject.marks.Pr}`);
+                    console.log(`        Result: ${subject.result}, Grade: ${subject.grade}, Credits: ${subject.credits}`);
                 });
             }
-        }
-
-        return sgpa;
+        });
+        
+    } catch (error) {
+        console.error('Error:', error.message);
     }
 }
+
+testUpdatedParser();
