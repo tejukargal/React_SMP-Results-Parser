@@ -37,6 +37,7 @@ class StudentResultsApp {
         document.getElementById('export-pdf-btn').addEventListener('click', () => this.exportToPDF());
         document.getElementById('copy-results-btn').addEventListener('click', () => this.copyResults());
         document.getElementById('copy-raw-btn').addEventListener('click', () => this.copyRawText());
+        document.getElementById('debug-btn').addEventListener('click', () => this.showDebugInfo());
         
         // Modal
         document.getElementById('close-modal').addEventListener('click', () => this.closeModal());
@@ -420,6 +421,53 @@ class StudentResultsApp {
             this.showSuccessMessage('Raw text copied to clipboard!');
         } catch (error) {
             this.showError('Failed to copy to clipboard');
+        }
+    }
+
+    showDebugInfo() {
+        if (!this.currentResults) return;
+
+        const debugDiv = document.getElementById('debug-info');
+        const debugContent = document.getElementById('debug-content');
+        
+        if (debugDiv.classList.contains('hidden')) {
+            // Show debug info
+            const rawText = this.currentResults.rawText;
+            const lines = rawText.split('\n');
+            
+            let debugText = `Total text length: ${rawText.length}\n`;
+            debugText += `Total lines: ${lines.length}\n\n`;
+            
+            debugText += `First 20 lines:\n`;
+            lines.slice(0, 20).forEach((line, index) => {
+                debugText += `${(index + 1).toString().padStart(3)}: "${line}"\n`;
+            });
+            
+            debugText += `\nStudent regex test:\n`;
+            const studentRegex = /(\d+)\s+(\d+(?:CE|ME|EC|CS|EE)\d+)\s+(.+?)\s*\[\s*S\(D\)\s*\/\s*o\s*:\s*(.+?)\s*\]/;
+            let studentMatches = [];
+            
+            lines.forEach((line, index) => {
+                const match = line.match(studentRegex);
+                if (match) {
+                    studentMatches.push(`Line ${index + 1}: ${match[2]} - ${match[3]} [${match[4]}]`);
+                }
+            });
+            
+            debugText += studentMatches.length > 0 ? studentMatches.join('\n') : 'No student matches found';
+            
+            debugText += `\n\nParsed students: ${this.currentResults.students.length}\n`;
+            this.currentResults.students.forEach((student, index) => {
+                debugText += `${index + 1}. ${student.regNo} - ${student.name} (Result: ${student.finalResult})\n`;
+            });
+            
+            debugContent.textContent = debugText;
+            debugDiv.classList.remove('hidden');
+            document.getElementById('debug-btn').textContent = 'Hide Debug Info';
+        } else {
+            // Hide debug info
+            debugDiv.classList.add('hidden');
+            document.getElementById('debug-btn').textContent = 'Show Debug Info';
         }
     }
 

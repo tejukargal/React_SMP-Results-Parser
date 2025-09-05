@@ -41,6 +41,10 @@ class ClientPDFParser {
             console.log('Raw text length:', rawText.length);
             console.log('Raw text preview:', rawText.substring(0, 500));
             
+            // Debug: Show first 10 lines
+            const debugLines = rawText.split('\n').slice(0, 15);
+            console.log('First 15 lines:', debugLines);
+            
             const results = {
                 institute: '',
                 programme: '',
@@ -118,6 +122,8 @@ class ClientPDFParser {
         let currentStudent = null;
         let inStudentSection = false;
         
+        console.log(`Processing ${lines.length} lines for parsing...`);
+        
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
             
@@ -139,10 +145,34 @@ class ClientPDFParser {
                 continue;
             }
             
-            // Check for student registration number and name
-            const studentMatch = line.match(/(\d+)\s+(\d+(?:CE|ME|EC|CS|EE)\d+)\s+(.+?)\s*\[\s*S\(D\)\s*\/\s*o\s*:\s*(.+?)\s*\]/);
+            // Check for student registration number and name - try multiple patterns
+            let studentMatch = line.match(/(\d+)\s+(\d+(?:CE|ME|EC|CS|EE)\d+)\s+(.+?)\s*\[\s*S\(D\)\s*\/\s*o\s*:\s*(.+?)\s*\]/);
+            
+            // If first pattern doesn't match, try alternative patterns
+            if (!studentMatch) {
+                // Pattern without S(D)/o format
+                studentMatch = line.match(/(\d+)\s+(\d+(?:CE|ME|EC|CS|EE)\d+)\s+(.+?)\s*\[\s*(.+?)\s*\]/);
+            }
+            
+            if (!studentMatch) {
+                // Simple pattern with just name in brackets
+                studentMatch = line.match(/(\d+)\s+(\d+(?:CE|ME|EC|CS|EE)\d+)\s+(.+)/);
+                if (studentMatch) {
+                    // Try to extract father's name from the end
+                    const nameAndFather = studentMatch[3];
+                    const bracketMatch = nameAndFather.match(/(.+?)\s*\[\s*(.+?)\s*\]$/);
+                    if (bracketMatch) {
+                        studentMatch = [studentMatch[0], studentMatch[1], studentMatch[2], bracketMatch[1], bracketMatch[2]];
+                    } else {
+                        studentMatch = [studentMatch[0], studentMatch[1], studentMatch[2], nameAndFather, 'Unknown'];
+                    }
+                }
+            }
+            
             if (studentMatch) {
                 const [, sno, regNo, studentName, fatherName] = studentMatch;
+                
+                console.log(`Found student at line ${i}: ${regNo} - ${studentName} [${fatherName}]`);
                 
                 currentStudent = {
                     regNo: regNo.trim(),
@@ -161,28 +191,36 @@ class ClientPDFParser {
                 continue;
             }
             
-            // Check for Results line - handle both "Results :" and "Results" + ": FAILS" patterns
-            if (currentStudent && (line.includes('Results :') || line === 'Results' || line.includes('RESULTS'))) {
+            // Check for Results line - handle multiple patterns
+            if (currentStudent && (line.includes('Results') || line.includes('RESULTS'))) {
                 let resultText = '';
                 
-                if (line.includes('Results :') || line.includes('RESULTS :')) {
-                    const resultMatch = line.match(/Results?\s*:\s*(.+)/i);
-                    if (resultMatch) {
-                        resultText = resultMatch[1].trim();
-                    }
-                } else if ((line === 'Results' || line === 'RESULTS') && i + 1 < lines.length) {
-                    const nextLine = lines[i + 1].trim();
-                    if (nextLine.startsWith(':')) {
-                        resultText = nextLine.substring(1).trim();
-                        i++; // Skip the next line since we processed it
-                    }
+                // Pattern 1: "Results : FAILS" (embedded in SGPA line or standalone)
+                const resultMatch = line.match(/Results?\s*:\s*([A-Z][A-Z\s]*)/i);
+                if (resultMatch) {
+                    resultText = resultMatch[1].trim();
+                    // Clean up common trailing text
+                    resultText = resultText.replace(/\s*(PASS|FAILS?|DISTINCTION|FIRST CLASS|SECOND CLASS).*$/i, '$1');
                 }
                 
                 if (resultText) {
                     currentStudent.finalResult = resultText;
                     console.log(`Set result for ${currentStudent.regNo}: ${resultText}`);
+                    inStudentSection = false;
                 }
-                inStudentSection = false;
+                continue;
+            }
+            
+            // Also check for Results on separate lines (fallback pattern)
+            if (currentStudent && inStudentSection && (line === 'Results' || line === 'RESULTS') && i + 1 < lines.length) {
+                const nextLine = lines[i + 1].trim();
+                if (nextLine.startsWith(':')) {
+                    const resultText = nextLine.substring(1).trim();
+                    currentStudent.finalResult = resultText;
+                    console.log(`Set result for ${currentStudent.regNo}: ${resultText}`);
+                    inStudentSection = false;
+                    i++; // Skip the next line
+                }
                 continue;
             }
             
@@ -201,31 +239,59 @@ class ClientPDFParser {
             if (currentStudent && inStudentSection && line && !skipLines.some(skip => line.includes(skip))) {
                 const parts = line.split(/\s+/);
                 
-                // Check if this is a QP code line
-                if (parts.length >= 6 && parts[0].includes(':')) {
-                    const qpCode = parts[0].replace(':', '').trim();
-                    
-                    if (this.validateQPCode(qpCode)) {
-                        try {
-                            const restOfLine = parts.slice(1).join(' ');
-                            const parsed = this.parseQPLine(restOfLine);
-                            
-                            if (parsed) {
-                                const subject = {
-                                    qpCode,
-                                    subjectName: parsed.subjectName,
-                                    marks: parsed.marks,
-                                    result: parsed.result === 'F' || parsed.result === 'F*' ? 'Fail' : 'Pass',
-                                    credits: parsed.credit,
-                                    grade: parsed.grade.replace(/[+\-*]/g, '')
-                                };
-                                
-                                currentStudent.semesterResults[0].subjects.push(subject);
-                                console.log(`Added subject for ${currentStudent.regNo}: ${qpCode} - ${parsed.subjectName}`);
-                            }
-                        } catch (error) {
-                            console.warn(`Error parsing QP line: ${line}`, error);
+                // Look for QP code pattern in the line - handle different formats
+                let qpCodeIndex = -1;
+                let qpCode = '';
+                
+                // Pattern 1: QP code with colon directly attached (20CE53I:)
+                for (let j = 0; j < parts.length; j++) {
+                    if (parts[j].includes(':') && this.validateQPCode(parts[j].replace(':', ''))) {
+                        qpCodeIndex = j;
+                        qpCode = parts[j].replace(':', '').trim();
+                        break;
+                    }
+                }
+                
+                // Pattern 2: QP code with colon separated by space (20CE53I :)
+                if (qpCodeIndex === -1) {
+                    for (let j = 0; j < parts.length - 1; j++) {
+                        if (parts[j + 1] === ':' && this.validateQPCode(parts[j])) {
+                            qpCodeIndex = j;
+                            qpCode = parts[j].trim();
+                            break;
                         }
+                    }
+                }
+                
+                if (qpCodeIndex >= 0 && qpCode) {
+                    try {
+                        // Get the rest of the line after the QP code and colon
+                        let restOfLine;
+                        if (parts[qpCodeIndex].includes(':')) {
+                            // Colon attached to QP code
+                            restOfLine = parts.slice(qpCodeIndex + 1).join(' ');
+                        } else {
+                            // Colon separate from QP code
+                            restOfLine = parts.slice(qpCodeIndex + 2).join(' ');
+                        }
+                        
+                        const parsed = this.parseQPLine(restOfLine);
+                        
+                        if (parsed) {
+                            const subject = {
+                                qpCode,
+                                subjectName: parsed.subjectName,
+                                marks: parsed.marks,
+                                result: parsed.result === 'F' || parsed.result === 'F*' ? 'Fail' : 'Pass',
+                                credits: parsed.credit,
+                                grade: parsed.grade.replace(/[+\-*]/g, '')
+                            };
+                            
+                            currentStudent.semesterResults[0].subjects.push(subject);
+                            console.log(`Added subject for ${currentStudent.regNo}: ${qpCode} - ${parsed.subjectName}`);
+                        }
+                    } catch (error) {
+                        console.warn(`Error parsing QP line: ${line}`, error);
                     }
                 }
             }

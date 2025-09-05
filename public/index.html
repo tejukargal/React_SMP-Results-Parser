@@ -211,13 +211,20 @@
 
                 <!-- Raw Text Tab -->
                 <div id="raw-content" class="tab-content hidden p-6">
-                    <div class="mb-4">
+                    <div class="mb-4 flex gap-2">
                         <button id="copy-raw-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center">
                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                             </svg>
                             Copy Raw Text
                         </button>
+                        <button id="debug-btn" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+                            Show Debug Info
+                        </button>
+                    </div>
+                    <div id="debug-info" class="hidden mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                        <h4 class="font-bold text-yellow-800 dark:text-yellow-200 mb-2">Debug Information:</h4>
+                        <pre id="debug-content" class="text-sm text-yellow-700 dark:text-yellow-300 whitespace-pre-wrap"></pre>
                     </div>
                     <pre id="raw-text" class="bg-gray-100 dark:bg-gray-900 p-4 rounded-lg text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-mono overflow-x-auto"></pre>
                 </div>

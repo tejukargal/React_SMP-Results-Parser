@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug PDF.js Extraction</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+    <h1>Debug PDF.js Text Extraction</h1>
+    <input type="file" id="pdfInput" accept=".pdf">
+    <br><br>
+    <button onclick="debugExtraction()">Debug Extraction</button>
+    <br><br>
+    
+    <div>
+        <h3>Raw Text (first 2000 chars):</h3>
+        <textarea id="rawText" style="width: 100%; height: 300px; font-family: monospace;"></textarea>
+    </div>
+    
+    <div>
+        <h3>Student Matches:</h3>
+        <pre id="studentMatches" style="background: #f0f0f0; padding: 10px; white-space: pre-wrap;"></pre>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        async function debugExtraction() {
+            const fileInput = document.getElementById('pdfInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a PDF file');
+                return;
+            }
+            
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+                
+                let rawText = '';
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    
+                    // Better text extraction - preserve spacing and line breaks
+                    let pageText = '';
+                    let lastY = null;
+                    
+                    textContent.items.forEach((item, index) => {
+                        // If this is a new line (different Y position), add newline
+                        if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) {
+                            pageText += '\n';
+                        }
+                        
+                        // Add the text with space if needed
+                        if (index > 0 && !pageText.endsWith('\n') && !pageText.endsWith(' ')) {
+                            pageText += ' ';
+                        }
+                        
+                        pageText += item.str;
+                        lastY = item.transform[5];
+                    });
+                    
+                    rawText += pageText + '\n';
+                }
+                
+                console.log('Extracted text length:', rawText.length);
+                document.getElementById('rawText').value = rawText.substring(0, 2000);
+                
+                // Test student regex patterns
+                const lines = rawText.split('\n');
+                let matches = [];
+                
+                const studentRegex = /(\d+)\s+(\d+(?:CE|ME|EC|CS|EE)\d+)\s+(.+?)\s*\[\s*S\(D\)\s*\/\s*o\s*:\s*(.+?)\s*\]/;
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    const match = line.match(studentRegex);
+                    if (match) {
+                        matches.push(`Line ${i+1}: ${match[2]} - ${match[3]} [${match[4]}]`);
+                        
+                        // Look for Results in next few lines
+                        for (let j = i+1; j < Math.min(i+10, lines.length); j++) {
+                            const nextLine = lines[j].trim();
+                            if (nextLine.includes('Results') || nextLine.includes('RESULTS')) {
+                                matches.push(`  -> Results line ${j+1}: "${nextLine}"`);
+                                if (j+1 < lines.length) {
+                                    const afterLine = lines[j+1].trim();
+                                    matches.push(`  -> After line ${j+2}: "${afterLine}"`);
+                                }
+                                break;
+                            }
+                        }
+                        matches.push('');
+                    }
+                }
+                
+                document.getElementById('studentMatches').textContent = 
+                    matches.length > 0 ? matches.join('\n') : 'No student matches found';
+                
+            } catch (error) {
+                alert('Error: ' + error.message);
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>
