@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF Text Extraction Comparison</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+    <h1>PDF Text Extraction Test</h1>
+    <input type="file" id="pdfInput" accept=".pdf">
+    <br><br>
+    <button onclick="compareMethods()">Compare Extraction Methods</button>
+    <br><br>
+    
+    <div>
+        <h3>PDF.js Method (first 1000 chars):</h3>
+        <pre id="pdfjsText" style="border: 1px solid black; padding: 10px; white-space: pre-wrap; max-height: 300px; overflow-y: auto;"></pre>
+    </div>
+    
+    <br>
+    
+    <div>
+        <h3>First student regex test:</h3>
+        <pre id="regexTest" style="border: 1px solid black; padding: 10px; white-space: pre-wrap;"></pre>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        async function compareMethods() {
+            const fileInput = document.getElementById('pdfInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a PDF file');
+                return;
+            }
+            
+            try {
+                // PDF.js method
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+                
+                let pdfjsText = '';
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    pdfjsText += pageText + '\n';
+                }
+                
+                document.getElementById('pdfjsText').textContent = pdfjsText.substring(0, 1000);
+                
+                // Test student regex
+                const studentRegex = /(\d+)\s+(\d+(?:CE|ME|EC|CS|EE)\d+)\s+(.+?)\s*\[\s*S\(D\)\s*\/\s*o\s*:\s*(.+?)\s*\]/;
+                const lines = pdfjsText.split('\n');
+                let matches = [];
+                
+                for (let line of lines) {
+                    const match = line.match(studentRegex);
+                    if (match) {
+                        matches.push(`Found: ${match[0]}`);
+                        if (matches.length >= 3) break; // Show first 3 matches
+                    }
+                }
+                
+                document.getElementById('regexTest').textContent = matches.length > 0 ? matches.join('\n') : 'No student matches found';
+                
+            } catch (error) {
+                alert('Error: ' + error.message);
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>

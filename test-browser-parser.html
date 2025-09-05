@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Browser Parser</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+    <h1>Test Client-Side PDF Parser</h1>
+    <input type="file" id="pdfInput" accept=".pdf">
+    <br><br>
+    <button onclick="testParser()">Test Parser</button>
+    <br><br>
+    
+    <div id="results" style="font-family: monospace; white-space: pre-wrap;"></div>
+
+    <script src="client-pdf-parser.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        async function testParser() {
+            const fileInput = document.getElementById('pdfInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a PDF file');
+                return;
+            }
+            
+            try {
+                console.log('Testing client parser...');
+                const results = await ClientPDFParser.parsePDF(file);
+                
+                console.log('Parse results:', results);
+                
+                let output = `Institute: ${results.institute}\n`;
+                output += `Programme: ${results.programme}\n`;
+                output += `Students: ${results.students.length}\n\n`;
+                
+                results.students.forEach((student, index) => {
+                    const subjectCount = student.semesterResults[0]?.subjects.length || 0;
+                    output += `${index + 1}. ${student.regNo} - ${student.name}\n`;
+                    output += `   Father: ${student.fatherName}\n`;
+                    output += `   Result: ${student.finalResult}\n`;
+                    output += `   Subjects: ${subjectCount}\n\n`;
+                });
+                
+                document.getElementById('results').textContent = output;
+                
+            } catch (error) {
+                alert('Error: ' + error.message);
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>

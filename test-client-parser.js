@@ -1,86 +1,27 @@
+const fs = require('fs');
+
+// Test if client-side parser logic works in Node.js
 class ClientPDFParser {
-    static async parsePDF(file) {
-        try {
-            // Use PDF.js to extract text from PDF
-            const arrayBuffer = await file.arrayBuffer();
-            
-            // Load PDF.js
-            if (!window.pdfjsLib) {
-                await this.loadPDFJS();
-            }
-            
-            const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-            
-            let rawText = '';
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                
-                // Better text extraction - preserve spacing and line breaks
-                let pageText = '';
-                let lastY = null;
-                
-                textContent.items.forEach((item, index) => {
-                    // If this is a new line (different Y position), add newline
-                    if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) {
-                        pageText += '\n';
-                    }
-                    
-                    // Add the text with space if needed
-                    if (index > 0 && !pageText.endsWith('\n') && !pageText.endsWith(' ')) {
-                        pageText += ' ';
-                    }
-                    
-                    pageText += item.str;
-                    lastY = item.transform[5];
-                });
-                
-                rawText += pageText + '\n';
-            }
-            
-            console.log('Raw text length:', rawText.length);
-            console.log('Raw text preview:', rawText.substring(0, 500));
-            
-            const results = {
-                institute: '',
-                programme: '',
-                resultDate: '',
-                students: [],
-                rawText
-            };
+    static async parsePDF(buffer) {
+        // For testing, we'll use pdf-parse to get the raw text
+        const pdfParse = require('pdf-parse');
+        const pdfData = await pdfParse(buffer);
+        const rawText = pdfData.text;
+        
+        const results = {
+            institute: '',
+            programme: '',
+            resultDate: '',
+            students: [],
+            rawText
+        };
 
-            results.institute = this.extractInstitute(rawText);
-            results.programme = this.extractProgramme(rawText);
-            results.resultDate = this.extractResultDate(rawText);
-            results.students = this.extractStudents(rawText);
+        results.institute = this.extractInstitute(rawText);
+        results.programme = this.extractProgramme(rawText);
+        results.resultDate = this.extractResultDate(rawText);
+        results.students = this.extractStudents(rawText);
 
-            console.log('Parsing results:', {
-                institute: results.institute,
-                programme: results.programme,
-                studentsCount: results.students.length
-            });
-            
-            results.students.forEach((student, index) => {
-                console.log(`Student ${index + 1}:`, student.regNo, student.name, `Subjects: ${student.semesterResults[0]?.subjects.length || 0}`);
-            });
-
-            return results;
-        } catch (error) {
-            throw new Error(`Failed to parse PDF: ${error.message}`);
-        }
-    }
-    
-    static async loadPDFJS() {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-            script.onload = () => {
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                resolve();
-            };
-            script.onerror = reject;
-            document.head.appendChild(script);
-        });
+        return results;
     }
 
     static extractInstitute(text) {
@@ -118,6 +59,8 @@ class ClientPDFParser {
         let currentStudent = null;
         let inStudentSection = false;
         
+        console.log(`Processing ${lines.length} lines...`);
+        
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
             
@@ -143,6 +86,8 @@ class ClientPDFParser {
             const studentMatch = line.match(/(\d+)\s+(\d+(?:CE|ME|EC|CS|EE)\d+)\s+(.+?)\s*\[\s*S\(D\)\s*\/\s*o\s*:\s*(.+?)\s*\]/);
             if (studentMatch) {
                 const [, sno, regNo, studentName, fatherName] = studentMatch;
+                
+                console.log(`Found student: ${regNo} - ${studentName}`);
                 
                 currentStudent = {
                     regNo: regNo.trim(),
@@ -181,6 +126,7 @@ class ClientPDFParser {
                 
                 if (resultText) {
                     currentStudent.finalResult = resultText;
+                    console.log(`Set result for ${currentStudent.regNo}: ${resultText}`);
                 }
                 inStudentSection = false;
                 continue;
@@ -221,6 +167,7 @@ class ClientPDFParser {
                                 };
                                 
                                 currentStudent.semesterResults[0].subjects.push(subject);
+                                console.log(`Added subject for ${currentStudent.regNo}: ${qpCode} - ${parsed.subjectName}`);
                             }
                         } catch (error) {
                             console.warn(`Error parsing QP line: ${line}`, error);
@@ -318,3 +265,30 @@ class ClientPDFParser {
         return sgpa;
     }
 }
+
+async function testClientParser() {
+    try {
+        const pdfPath = 'c:/Users/Lekhana/Downloads/Results CE 1-4.pdf';
+        const buffer = fs.readFileSync(pdfPath);
+        
+        console.log('Testing client-side parser...');
+        const results = await ClientPDFParser.parsePDF(buffer);
+        
+        console.log('=== PARSING RESULTS ===');
+        console.log(`Institute: ${results.institute}`);
+        console.log(`Programme: ${results.programme}`);
+        console.log(`Students found: ${results.students.length}`);
+        
+        results.students.forEach((student, index) => {
+            const subjectCount = student.semesterResults[0]?.subjects.length || 0;
+            console.log(`\n${index + 1}. ${student.regNo} - ${student.name}`);
+            console.log(`   Result: ${student.finalResult}`);
+            console.log(`   Subjects: ${subjectCount}`);
+        });
+        
+    } catch (error) {
+        console.error('Error:', error.message);
+    }
+}
+
+testClientParser();

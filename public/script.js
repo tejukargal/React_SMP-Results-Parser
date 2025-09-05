@@ -126,6 +126,10 @@ class StudentResultsApp {
             // Use client-side PDF parser
             const results = await ClientPDFParser.parsePDF(this.selectedFile);
             
+            console.log('Received results from parser:', results);
+            console.log('Students array:', results.students);
+            console.log('Students count:', results.students?.length || 0);
+            
             this.currentResults = results;
             this.displayResults();
             
@@ -162,7 +166,13 @@ class StudentResultsApp {
     }
 
     displayResults() {
-        if (!this.currentResults) return;
+        if (!this.currentResults) {
+            console.log('No current results to display');
+            return;
+        }
+
+        console.log('Displaying results:', this.currentResults);
+        console.log('Students to display:', this.currentResults.students);
 
         // Show results container
         document.getElementById('results-container').classList.remove('hidden');
@@ -172,6 +182,7 @@ class StudentResultsApp {
         
         // Filter and display students
         this.filteredStudents = [...this.currentResults.students];
+        console.log('Filtered students:', this.filteredStudents);
         this.renderStudentsTable();
     }
 
@@ -197,10 +208,12 @@ class StudentResultsApp {
     }
 
     renderStudentsTable() {
+        console.log('Rendering students table with:', this.filteredStudents.length, 'students');
         const tbody = document.getElementById('results-tbody');
         const noResults = document.getElementById('no-results');
 
         if (this.filteredStudents.length === 0) {
+            console.log('No filtered students to display');
             tbody.innerHTML = '';
             noResults.classList.remove('hidden');
             return;
