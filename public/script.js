@@ -408,13 +408,29 @@ class StudentResultsApp {
         const modalSubjects = document.getElementById('modal-subjects');
         modalSubjects.innerHTML = '';
 
+        let totalSubjects = 0;
+        let passedSubjects = 0;
+        let failedSubjects = 0;
+
         student.semesterResults.forEach(semResult => {
             semResult.subjects.forEach(subject => {
+                totalSubjects++;
+                if (subject.result.toLowerCase() === 'pass') {
+                    passedSubjects++;
+                } else if (subject.result.toLowerCase() === 'fail') {
+                    failedSubjects++;
+                }
+
                 const semester = subject.semester || this.extractSemesterFromQPCode(subject.qpCode);
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                         ${semester}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        <span class="px-2 py-1 text-xs font-semibold rounded ${this.getResultClass(subject.result)}">
+                            ${subject.result}
+                        </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                         ${subject.qpCode}
@@ -437,11 +453,6 @@ class StudentResultsApp {
                         </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        <span class="px-2 py-1 text-xs font-semibold rounded ${this.getResultClass(subject.result)}">
-                            ${subject.result}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                         ${subject.credits}
                     </td>
                 `;
@@ -449,7 +460,45 @@ class StudentResultsApp {
             });
         });
 
+        // Generate and display the summary
+        this.updateSubjectSummary(student.name, passedSubjects, failedSubjects, totalSubjects);
+
         document.getElementById('subject-modal').classList.remove('hidden');
+    }
+
+    updateSubjectSummary(studentName, passed, failed, total) {
+        const summaryText = document.getElementById('summary-text');
+        
+        // Determine gender pronoun (simple heuristic - can be improved)
+        const pronouns = this.getPronouns(studentName);
+        
+        let summaryMessage = `The student has passed in ${passed.toString().padStart(2, '0')} subjects and has failed in ${failed.toString().padStart(2, '0')} subjects. Out of ${total.toString().padStart(2, '0')} subjects ${pronouns.object} has appeared.`;
+        
+        // Add additional context based on performance
+        if (failed === 0) {
+            summaryMessage += ` Excellent performance with 100% pass rate!`;
+        } else if (passed > failed) {
+            summaryMessage += ` Good performance with majority subjects passed.`;
+        } else if (failed > passed) {
+            summaryMessage += ` Needs improvement in upcoming examinations.`;
+        }
+        
+        summaryText.textContent = summaryMessage;
+    }
+
+    getPronouns(name) {
+        // Simple gender detection based on common name patterns
+        // This is a basic implementation and may not be 100% accurate
+        const femalePatterns = ['A$', 'I$', 'AMMA$', 'APPA$'];
+        const nameUpper = name.toUpperCase();
+        
+        const isFemale = femalePatterns.some(pattern => new RegExp(pattern).test(nameUpper));
+        
+        return {
+            subject: isFemale ? 'she' : 'he',
+            object: isFemale ? 'she' : 'he',
+            possessive: isFemale ? 'her' : 'his'
+        };
     }
 
     extractSemesterFromQPCode(qpCode) {
