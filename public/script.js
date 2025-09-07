@@ -26,7 +26,13 @@ class StudentResultsApp {
         document.getElementById('extract-btn').addEventListener('click', () => this.extractResults());
         
         // Search and filter
-        document.getElementById('search-input').addEventListener('input', () => this.filterResults());
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            // Convert input to uppercase dynamically
+            const cursorPosition = e.target.selectionStart;
+            e.target.value = e.target.value.toUpperCase();
+            e.target.setSelectionRange(cursorPosition, cursorPosition);
+            this.filterResults();
+        });
         document.getElementById('result-filter').addEventListener('change', () => this.filterResults());
         
         // Tab navigation
@@ -355,21 +361,21 @@ class StudentResultsApp {
             
             return `
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white" style="width: 20%;">
                         ${student.regNo}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white" style="width: 20%;">
                         ${student.name}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white" style="width: 20%;">
                         ${student.fatherName}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-6 py-4 whitespace-nowrap" style="width: 20%;">
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${resultClass}">
                             ${student.finalResult}
                         </span>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium" style="width: 20%;">
                         <button onclick="app.showSubjectDetails('${student.regNo}')" 
                                 class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">
                             View Details
@@ -404,8 +410,12 @@ class StudentResultsApp {
 
         student.semesterResults.forEach(semResult => {
             semResult.subjects.forEach(subject => {
+                const semester = subject.semester || this.extractSemesterFromQPCode(subject.qpCode);
                 const row = document.createElement('tr');
                 row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                        ${semester}
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                         ${subject.qpCode}
                     </td>
@@ -440,6 +450,54 @@ class StudentResultsApp {
         });
 
         document.getElementById('subject-modal').classList.remove('hidden');
+    }
+
+    extractSemesterFromQPCode(qpCode) {
+        if (!qpCode || qpCode.length < 6) return '-';
+        
+        // Extract semester from various QP code patterns
+        
+        // Pattern 1: 20CE53I, 20ME41P - semester in 5th position (single digit)
+        const match1 = qpCode.match(/^\d{2}[A-Z]{2}(\d)(\d)[A-Z]$/);
+        if (match1) {
+            const semesterDigit = parseInt(match1[1]);
+            return semesterDigit > 0 && semesterDigit <= 8 ? semesterDigit : '-';
+        }
+        
+        // Pattern 2: 20CE1IT, 20EG1P - semester as single digit after department code
+        const match2 = qpCode.match(/^\d{2}[A-Z]{2}(\d)[A-Z]*$/);
+        if (match2) {
+            const semesterDigit = parseInt(match2[1]);
+            return semesterDigit > 0 && semesterDigit <= 8 ? semesterDigit : '-';
+        }
+        
+        // Pattern 3: 20EG01P, 20SC02P, 20CS01P, 20AU01T - semester as two digits (01, 02, etc.)
+        const match3 = qpCode.match(/^\d{2}[A-Z]{2}0(\d)[A-Z]*$/);
+        if (match3) {
+            const semesterDigit = parseInt(match3[1]);
+            return semesterDigit > 0 && semesterDigit <= 8 ? semesterDigit : '-';
+        }
+        
+        // Pattern 4: More flexible pattern for longer department codes
+        const match4 = qpCode.match(/^\d{2}[A-Z]+0?(\d)(\d)?[A-Z]*$/);
+        if (match4) {
+            const semesterDigit = parseInt(match4[1]);
+            return semesterDigit > 0 && semesterDigit <= 8 ? semesterDigit : '-';
+        }
+        
+        // If no pattern matches, try to find any single digit that could be a semester
+        const digits = qpCode.match(/\d/g);
+        if (digits && digits.length >= 3) {
+            // Skip the first two digits (year), look for semester digit
+            for (let i = 2; i < digits.length; i++) {
+                const digit = parseInt(digits[i]);
+                if (digit > 0 && digit <= 8) {
+                    return digit;
+                }
+            }
+        }
+        
+        return '-';
     }
 
     getGradeClass(grade) {

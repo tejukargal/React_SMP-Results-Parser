@@ -298,6 +298,17 @@ class ClientPDFParser {
             if (currentStudent && inStudentSection && line && !skipLines.some(skip => line.includes(skip))) {
                 const parts = line.split(/\s+/);
                 
+                // Extract semester number from the beginning of the line
+                // Pattern: "5 01 20CE53I : TRANSPORTATION ENGINEERING 172 / 04 / 50 F 0 F"
+                let semester = null;
+                if (parts.length >= 3) {
+                    const firstPart = parts[0];
+                    // Check if first part is a single digit (1-8) indicating semester
+                    if (/^[1-8]$/.test(firstPart)) {
+                        semester = parseInt(firstPart);
+                    }
+                }
+                
                 // Look for QP code pattern in the line - handle different formats
                 let qpCodeIndex = -1;
                 let qpCode = '';
@@ -343,11 +354,12 @@ class ClientPDFParser {
                                 marks: parsed.marks,
                                 result: parsed.result === 'F' || parsed.result === 'F*' ? 'Fail' : 'Pass',
                                 credits: parsed.credit,
-                                grade: parsed.grade.replace(/[+\-*]/g, '')
+                                grade: parsed.grade.replace(/[+\-*]/g, ''),
+                                semester: semester // Add the semester information
                             };
                             
                             currentStudent.semesterResults[0].subjects.push(subject);
-                            console.log(`Added subject for ${currentStudent.regNo}: ${qpCode} - ${parsed.subjectName}`);
+                            console.log(`Added subject for ${currentStudent.regNo}: ${qpCode} - ${parsed.subjectName} (Sem: ${semester})`);
                         }
                     } catch (error) {
                         console.warn(`Error parsing QP line: ${line}`, error);
